@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h2>Your Saved Passwords</h2>
+        <a href="{{ url_for('views.add_credential') }}" class="btn">+ Add New</a>
+    </div>
+
+    {% if credentials %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Site</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cred in credentials %}
+                <tr>
+                    <td>{{ cred.site_name }}</td>
+                    <td>{{ cred.site_username }}</td>
+                    <td>••••••••</td>
+                    <td>
+                        <a href="{{ url_for('views.delete_credential', cred_id=cred.id) }}" 
+                           class="btn-danger">Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No saved passwords yet. <a href="{{ url_for('views.add_credential') }}">Add one now</a></p>
+    {% endif %}
+</div>
+{% endblock %}

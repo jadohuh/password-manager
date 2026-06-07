@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Manager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <nav>
+        <span class="logo">🔐 PassVault</span>
+        {% if current_user.is_authenticated %}
+            <span>Welcome, {{ current_user.username }}</span>
+            <a href="{{ url_for('views.logout') }}">Logout</a>
+        {% endif %}
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>
