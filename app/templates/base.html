@@ -4,19 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Password Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0f172a">
     <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'default';
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
 </head>
 <body>
 
-    <nav>
-        <span class="logo">🔐 PassVault</span>
-        {% if current_user.is_authenticated %}
-            <span>Welcome, {{ current_user.username }}</span>
-            <a href="{{ url_for('views.logout') }}">Logout</a>
-        {% endif %}
+    <nav class="site-nav">
+        <div class="nav-left">
+            {% if current_user.is_authenticated %}
+                <a class="logo" href="{{ url_for('views.dashboard') }}">PassVault</a>
+            {% else %}
+                <a class="logo" href="{{ url_for('views.login') }}">PassVault</a>
+            {% endif %}
+        </div>
+        <div class="nav-right">
+            {% if current_user.is_authenticated %}
+                <a class="btn btn-sm btn-secondary" href="{{ url_for('views.settings') }}">Settings</a>
+                <a class="nav-link" href="#">
+                    Welcome,
+                    {% if current_user.first_name %}
+                        {{ current_user.first_name }}
+                    {% else %}
+                        {{ current_user.username }}
+                    {% endif %}
+                </a>
+                <a class="btn btn-sm" href="{{ url_for('views.add_credential') }}">+ Add</a>
+                <a class="nav-link" href="{{ url_for('views.logout') }}">Logout</a>
+            {% else %}
+                <a class="nav-link" href="{{ url_for('views.login') }}">Login</a>
+                <a class="btn btn-sm" href="{{ url_for('views.register') }}">Register</a>
+            {% endif %}
+        </div>
     </nav>
 
-    <div class="container">
+    <main class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
                 <div class="alert {{ category }}">{{ message }}</div>
@@ -24,7 +53,38 @@
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.password-field').forEach(field => {
+            const input = field.querySelector('input');
+            const button = field.querySelector('.toggle-password');
+            if (!input || !button) return;
+            button.addEventListener('click', function() {
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    button.textContent = 'Hide';
+                } else {
+                    input.type = 'password';
+                    button.textContent = 'Show';
+                }
+            });
+        });
+
+        const themeSelect = document.getElementById('theme-select');
+        if (themeSelect) {
+            themeSelect.value = localStorage.getItem('theme') || 'default';
+            themeSelect.addEventListener('change', function() {
+                const theme = this.value;
+                document.documentElement.dataset.theme = theme;
+                localStorage.setItem('theme', theme);
+            });
+        }
+    });
+    </script>
+
+    {% block scripts %}{% endblock %}
 
 </body>
 </html>

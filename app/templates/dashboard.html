@@ -1,38 +1,191 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="dashboard">
+<section class="dashboard">
     <div class="dashboard-header">
-        <h2>Your Saved Passwords</h2>
-        <a href="{{ url_for('views.add_credential') }}" class="btn">+ Add New</a>
+        <div>
+            <h2>
+                Hi {% if current_user.first_name %}{{ current_user.first_name }}{% else %}{{ current_user.username }}{% endif %},
+                here are your saved passwords
+            </h2>
+            <p class="dashboard-subtitle">Securely store and manage all your logins in one place.</p>
+        </div>
     </div>
 
     {% if credentials %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Site</th>
-                    <th>Username</th>
-                    <th>Password</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cred in credentials %}
-                <tr>
-                    <td>{{ cred.site_name }}</td>
-                    <td>{{ cred.site_username }}</td>
-                    <td>••••••••</td>
-                    <td>
-                        <a href="{{ url_for('views.delete_credential', cred_id=cred.id) }}" 
-                           class="btn-danger">Delete</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="credentials-grid">
+            {% for cred in credentials %}
+            <div class="card">
+                <h3 class="card-title">{{ cred.site_name }}</h3>
+                <p class="card-sub">{{ cred.site_username }}</p>
+                <p class="card-pass">
+                    <span class="masked">••••••••</span>
+                    <span class="revealed" data-cred-id="{{ cred.id }}" style="display:none"></span>
+                </p>
+                <div class="card-actions">
+                    <button class="btn-reveal btn" data-cred-id="{{ cred.id }}">Show</button>
+                    <button class="btn-copy btn" data-cred-id="{{ cred.id }}" style="display:none">Copy</button>
+                    <a href="{{ url_for('views.delete_credential', cred_id=cred.id) }}" class="btn-danger">Delete</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     {% else %}
-        <p class="empty">No saved passwords yet. <a href="{{ url_for('views.add_credential') }}">Add one now</a></p>
+        <div class="empty-state">
+            <div class="empty-state-card">
+                <h3>No passwords yet</h3>
+                <p>Start by adding your first login so you can access it securely anytime.</p>
+                <a href="{{ url_for('views.add_credential') }}" class="btn">Add your first password</a>
+            </div>
+        </div>
     {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    const TIMEOUT_MS = 15000;
+    const revealModal = document.getElementById('reveal-modal');
+    const revealInput = document.getElementById('reveal-password-input');
+    const revealToggle = document.getElementById('reveal-password-toggle');
+    const revealConfirm = document.getElementById('reveal-confirm');
+    const revealCancel = document.getElementById('reveal-cancel');
+    let activeReveal = null;
+
+    function closeRevealModal() {
+        revealModal.style.display = 'none';
+        revealInput.value = '';
+        if (revealInput.type === 'text') {
+            revealInput.type = 'password';
+            revealToggle.textContent = 'Show';
+        }
+        activeReveal = null;
+    }
+
+    function openRevealModal(revealInfo) {
+        activeReveal = revealInfo;
+        revealModal.style.display = 'flex';
+        setTimeout(() => revealInput.focus(), 10);
+    }
+
+    revealToggle.addEventListener('click', function() {
+        if (revealInput.type === 'password') {
+            revealInput.type = 'text';
+            revealToggle.textContent = 'Hide';
+        } else {
+            revealInput.type = 'password';
+            revealToggle.textContent = 'Show';
+        }
+    });
+
+    revealCancel.addEventListener('click', closeRevealModal);
+
+    revealConfirm.addEventListener('click', async function() {
+        if (!activeReveal) return;
+        const password = revealInput.value.trim();
+        if (!password) return;
+        const revealInfo = activeReveal;
+        closeRevealModal();
+        await revealCredential(revealInfo, password);
+    });
+
+    function showCopyButton(id, visible) {
+        const copyBtn = document.querySelector('.btn-copy[data-cred-id="'+id+'"]');
+        if (copyBtn) copyBtn.style.display = visible ? '' : 'none';
+    }
+
+    async function revealCredential({id, btn, revealedEl, maskedEl}, password) {
+        try {
+            const res = await fetch('/reveal/' + id, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ password })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(()=>({error:'Unknown error'}));
+                alert(err.error || 'Failed to reveal');
+                return;
+            }
+            const data = await res.json();
+            revealedEl.textContent = data.password;
+            maskedEl.style.display = 'none';
+            revealedEl.style.display = '';
+            btn.textContent = 'Hide';
+            btn.dataset.showing = '1';
+            showCopyButton(id, true);
+
+            setTimeout(() => {
+                revealedEl.style.display = 'none';
+                maskedEl.style.display = '';
+                btn.textContent = 'Show';
+                btn.dataset.showing = '0';
+                showCopyButton(id, false);
+            }, TIMEOUT_MS);
+        } catch(e) {
+            console.error(e);
+            alert('Error revealing credential');
+        }
+    }
+
+    document.querySelectorAll('.btn-reveal').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-cred-id');
+            const revealedEl = document.querySelector('.revealed[data-cred-id="'+id+'"]');
+            const maskedEl = this.closest('.card').querySelector('.masked');
+            if (this.dataset.showing === '1') {
+                revealedEl.style.display = 'none';
+                maskedEl.style.display = '';
+                this.textContent = 'Show';
+                this.dataset.showing = '0';
+                showCopyButton(id, false);
+                return;
+            }
+            openRevealModal({id, btn:this, revealedEl, maskedEl});
+        });
+    });
+
+    document.querySelectorAll('.btn-copy').forEach(cb => {
+        cb.addEventListener('click', async function(){
+            const id = this.getAttribute('data-cred-id');
+            const revealedEl = document.querySelector('.revealed[data-cred-id="'+id+'"]');
+            if(!revealedEl || !revealedEl.textContent) return;
+            try {
+                await navigator.clipboard.writeText(revealedEl.textContent);
+                this.textContent = 'Copied';
+                setTimeout(async ()=>{
+                    this.textContent = 'Copy';
+                    try { await navigator.clipboard.writeText(''); } catch(e) {}
+                }, 5000);
+            } catch(e) {
+                alert('Copy failed');
+            }
+        });
+    });
+
+    window.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && revealModal.style.display === 'flex') {
+            closeRevealModal();
+        }
+    });
+});
+</script>
+<div id="reveal-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <h3>Confirm reveal</h3>
+        <p>Enter your account password to decrypt this credential.</p>
+        <div class="modal-field">
+            <label for="reveal-password-input">Account Password</label>
+            <div class="password-row">
+                <input id="reveal-password-input" type="password" autocomplete="current-password" placeholder="Enter password" />
+                <button id="reveal-password-toggle" class="btn-secondary" type="button">Show</button>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button id="reveal-confirm" class="btn">Confirm</button>
+            <button id="reveal-cancel" class="btn-secondary" type="button">Cancel</button>
+        </div>
+    </div>
 </div>
 {% endblock %}

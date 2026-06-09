@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container settings-container">
+    <h2>Settings</h2>
+    <p class="settings-intro">Customize your appearance, update your account details, and personalize how PassVault works for you.</p>
+
+    <div class="settings-tabs">
+        <button type="button" class="tab-button active" data-tab="appearance">Appearance</button>
+        <button type="button" class="tab-button" data-tab="account">Account</button>
+        <button type="button" class="tab-button" data-tab="security">Security</button>
+        <button type="button" class="tab-button" data-tab="data">Data</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-appearance">
+        <form method="POST" class="settings-form" id="appearance-form">
+            <input type="hidden" name="form_type" value="appearance">
+            <div class="field-row">
+                <label for="theme-select">Theme</label>
+                <select id="theme-select" name="theme_select" class="theme-select">
+                    <option value="default">Default</option>
+                    <option value="red">Red</option>
+                    <option value="orange">Orange</option>
+                    <option value="yellow">Yellow</option>
+                    <option value="green">Green</option>
+                    <option value="blue">Blue</option>
+                    <option value="indigo">Indigo</option>
+                    <option value="violet">Violet</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn">Save Appearance</button>
+            <button type="button" class="btn btn-secondary" id="clear-theme">Reset theme settings</button>
+        </form>
+    </div>
+
+    <div class="tab-panel" id="tab-account">
+        <form method="POST" class="settings-form" id="account-form">
+            <input type="hidden" name="form_type" value="account">
+            <div class="field-row">
+                <label for="first_name">First name</label>
+                <input id="first_name" type="text" name="first_name" value="{{ current_user.first_name }}" required>
+            </div>
+            <div class="field-row">
+                <label for="last_name">Last name <small>(optional)</small></label>
+                <input id="last_name" type="text" name="last_name" value="{{ current_user.last_name or '' }}">
+            </div>
+            <div class="field-row">
+                <label for="username">Username</label>
+                <input id="username" type="text" name="username" value="{{ current_user.username }}" required>
+            </div>
+            <div class="section-divider">Change password</div>
+            <div class="field-row">
+                <label for="current_password">Current password</label>
+                <input id="current_password" type="password" name="current_password" autocomplete="current-password">
+            </div>
+            <div class="field-row">
+                <label for="new_password">New password</label>
+                <input id="new_password" type="password" name="new_password" autocomplete="new-password">
+            </div>
+            <div class="field-row">
+                <label for="confirm_password">Confirm new password</label>
+                <input id="confirm_password" type="password" name="confirm_password" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn">Save Account</button>
+        </form>
+    </div>
+
+    <div class="tab-panel" id="tab-security">
+        <div class="settings-form">
+            <p class="settings-note">For security, you will always be asked for your account password before viewing stored credentials.</p>
+            <div class="field-row">
+                <label for="auto_lock_timeout">Auto-lock after inactivity</label>
+                <select id="auto_lock_timeout" class="theme-select">
+                    <option value="0">Never</option>
+                    <option value="1">1 minute</option>
+                    <option value="5">5 minutes</option>
+                    <option value="15">15 minutes</option>
+                </select>
+            </div>
+            <button type="button" class="btn" id="save-security">Save Security Settings</button>
+        </div>
+    </div>
+
+    <div class="tab-panel" id="tab-data">
+        <div class="settings-form">
+            <p class="settings-note">Download your data or reset local preferences for a clean workspace.</p>
+            <div class="field-row">
+                <button type="button" class="btn" id="export-data">Export my credentials</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.tab-button');
+    const panels = document.querySelectorAll('.tab-panel');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            tabs.forEach(btn => btn.classList.remove('active'));
+            panels.forEach(panel => panel.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+        });
+    });
+
+    const themeSelect = document.getElementById('theme-select');
+
+    function applySavedTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'default';
+        themeSelect.value = savedTheme;
+        document.documentElement.dataset.theme = savedTheme;
+    }
+
+    function setTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem('theme', theme);
+    }
+
+    themeSelect.addEventListener('change', function() {
+        setTheme(this.value);
+    });
+
+    document.getElementById('save-security').addEventListener('click', function() {
+        const timeout = document.getElementById('auto_lock_timeout').value;
+        localStorage.setItem('auto_lock_timeout', timeout);
+        alert('Security settings saved.');
+    });
+
+    document.getElementById('export-data').addEventListener('click', async function() {
+        const password = prompt('Enter your account password to export credentials');
+        if (!password) return;
+
+        try {
+            const res = await fetch('/export-credentials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.error || 'Export failed');
+                return;
+            }
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'passvault-credentials.csv';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Export failed');
+        }
+    });
+
+    document.getElementById('clear-theme').addEventListener('click', function() {
+        localStorage.removeItem('theme');
+        document.documentElement.dataset.theme = 'default';
+        themeSelect.value = 'default';
+        alert('Theme settings reset.');
+    });
+
+    applySavedTheme();
+});
+</script>
+{% endblock %}

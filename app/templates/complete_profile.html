@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Complete Your Profile</h2>
+    <p>Please enter your first name so we can welcome you properly.</p>
+    <form method="POST">
+        <label>First Name</label>
+        <input type="text" name="first_name" required>
+
+        <label>Last Name <small>(optional)</small></label>
+        <input type="text" name="last_name" placeholder="Last name">
+
+        <button type="submit">Save</button>
+    </form>
+</div>
+{% endblock %}
