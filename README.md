@@ -28,10 +28,21 @@ Then update `.env`:
 
 ```env
 SECRET_KEY=your-secure-secret-key
+# For local development, SQLite is fine; for production, use Postgres or another managed DB.
 DATABASE_URL=sqlite:///passwords.db
 FLASK_DEBUG=0
 PORT=5001
 ```
+
+## Use PostgreSQL in production
+
+For a production deployment, set `DATABASE_URL` to a PostgreSQL connection string, for example:
+
+```env
+DATABASE_URL=postgresql://username:password@host:port/dbname
+```
+
+Render, Heroku, and Railway can all provide a managed Postgres database.
 
 ## Run locally
 
