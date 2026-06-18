@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from app import db, bcrypt
 from app.models import User, Credential, RevealLog
 from cryptography.fernet import Fernet
-import base64, hashlib, os, binascii, time, csv, io
+import base64, hashlib, os, binascii, time, csv, io, string
 from datetime import datetime
 
 views = Blueprint('views', __name__)
@@ -22,6 +22,21 @@ def get_fernet_from_password(raw_password, salt_hex):
 def legacy_get_fernet_from_hash(pw_hash):
     key = hashlib.sha256(pw_hash.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
+
+def validate_password_complexity(password):
+    if not password:
+        return False, 'Password is required.'
+    if len(password) < 12:
+        return False, 'Master password must be at least 12 characters long.'
+    if not any(ch.islower() for ch in password):
+        return False, 'Master password must include at least one lowercase letter.'
+    if not any(ch.isupper() for ch in password):
+        return False, 'Master password must include at least one uppercase letter.'
+    if not any(ch.isdigit() for ch in password):
+        return False, 'Master password must include at least one number.'
+    if not any(ch in string.punctuation for ch in password):
+        return False, 'Master password must include at least one special character.'
+    return True, ''
 
 @views.route('/')
 @login_required
@@ -68,6 +83,29 @@ def settings():
                 if new_password != confirm_password:
                     flash('New password and confirmation do not match.', 'danger')
                     return redirect(url_for('views.settings'))
+                valid, message = validate_password_complexity(new_password)
+                if not valid:
+                    flash(message, 'danger')
+                    return redirect(url_for('views.settings'))
+
+                # Re-encrypt stored credentials with the new master password key.
+                if current_user.encryption_salt:
+                    old_f = get_fernet_from_password(current_password, current_user.encryption_salt)
+                    salt = current_user.encryption_salt
+                else:
+                    old_f = legacy_get_fernet_from_hash(current_user.password)
+                    salt = binascii.hexlify(os.urandom(16)).decode()
+                    current_user.encryption_salt = salt
+
+                new_f = get_fernet_from_password(new_password, salt)
+                creds = Credential.query.filter_by(user_id=current_user.id).all()
+                for cred in creds:
+                    try:
+                        plain = old_f.decrypt(cred.site_password.encode()).decode('utf-8')
+                        cred.site_password = new_f.encrypt(plain.encode()).decode('utf-8')
+                    except Exception:
+                        pass
+
                 current_user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
 
             db.session.commit()
@@ -114,17 +152,35 @@ def export_credentials():
 @views.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = (request.form.get('username') or '').strip()
         password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
+
         if not first_name:
             flash('First name is required.', 'danger')
             return redirect(url_for('views.register'))
+        if not username:
+            flash('Username is required.', 'danger')
+            return redirect(url_for('views.register'))
+        if not password or not confirm_password:
+            flash('Password and confirmation are required.', 'danger')
+            return redirect(url_for('views.register'))
+        if password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('views.register'))
+
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already exists.', 'danger')
             return redirect(url_for('views.register'))
+
+        valid, message = validate_password_complexity(password)
+        if not valid:
+            flash(message, 'danger')
+            return redirect(url_for('views.register'))
+
         hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
         # generate per-user encryption salt
         salt = binascii.hexlify(os.urandom(16)).decode()
